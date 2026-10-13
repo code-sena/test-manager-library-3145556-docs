@@ -1,22 +1,23 @@
-# Contrato de la API — Manager Library
+# API contract — Manager Library
 
-El contrato HTTP es **independiente del lenguaje**: quien lo implemente en React + Laravel debe respetarlo igual que quien lo
-implemente en Python o .NET. Qué hace cada operación está en [`spec.md`](spec.md); qué se guarda, en [`data-model.md`](data-model.md).
+The HTTP contract is **language-independent**: whoever implements it in React + Laravel must respect
+it exactly as whoever implements it in Python or .NET. What each operation does is in
+[`spec.md`](spec.md); what is stored, in [`data-model.md`](data-model.md).
 
-## 1. Convenciones
+## 1. Conventions
 
-| Tema | Regla |
+| Topic | Rule |
 |---|---|
 | Base | `/api/v1` |
-| Formato | JSON, UTF-8. Nombres de campo en `snake_case` |
-| Identificadores | UUID v4 como texto |
-| Fechas | ISO 8601 en UTC, con `Z` (`2026-10-14T14:15:00Z`) |
-| Dinero | No hay. El sistema no maneja importes |
-| Autenticación | `Authorization: Bearer <token>` en todo salvo `POST /auth/login` y `GET /health` |
-| Paginación | `?page=1&size=20`. `size` máximo 50. La respuesta es `{ "items": [...], "page": 1, "size": 20, "total": 134 }` |
-| Idioma | Mensajes de error en español; campos y códigos en inglés |
+| Format | JSON, UTF-8. Field names in `snake_case` |
+| Identifiers | UUID v4 as text |
+| Dates | ISO 8601 in UTC, with `Z` (`2026-10-14T14:15:00Z`) |
+| Money | None. The system handles no amounts |
+| Authentication | `Authorization: Bearer <token>` on everything except `POST /auth/login` and `GET /health` |
+| Pagination | `?page=1&size=20`. `size` max 50. The response is `{ "items": [...], "page": 1, "size": 20, "total": 134 }` |
+| Language | Error messages in Spanish; fields and codes in English |
 
-### Cuerpo de error (único para todos los errores)
+### Error body (the same for every error)
 
 ```json
 {
@@ -26,88 +27,88 @@ implemente en Python o .NET. Qué hace cada operación está en [`spec.md`](spec
 }
 ```
 
-`details` puede ir vacío. **Nunca** incluye trazas, SQL, rutas del servidor ni la contraseña.
+`details` may be empty. It **never** includes stack traces, SQL, server paths or the password.
 
-### Códigos de estado
+### Status codes
 
-| Estado | Cuándo |
+| Status | When |
 |---|---|
-| 200 / 201 / 204 | Éxito / creado / sin contenido |
-| 401 | Sin token, token inválido o vencido, credenciales inválidas |
-| 403 | Rol insuficiente |
-| 404 | No existe (o está dado de baja) |
-| 409 | Conflicto de estado: duplicado, sin ejemplares, ya devuelto, socio con vencidos, libro con préstamos abiertos |
-| 422 | Validación: campo inválido, regla de entrada rota, rango de fechas invertido |
+| 200 / 201 / 204 | Success / created / no content |
+| 401 | No token, invalid or expired token, invalid credentials |
+| 403 | Insufficient role |
+| 404 | Does not exist (or has been soft-deleted) |
+| 409 | State conflict: duplicate, no copies left, already returned, member with overdue items, book with open loans |
+| 422 | Validation: invalid field, broken input rule, inverted date range |
 
-## 2. Códigos de error de negocio
+## 2. Business error codes
 
-| `code` | Estado | Origen |
+| `code` | Status | Origin |
 |---|---|---|
-| `INVALID_CREDENTIALS` | 401 | CA-01.2 |
-| `FORBIDDEN_ROLE` | 403 | CA-01.3 |
-| `NOT_FOUND` | 404 | Cualquier recurso |
-| `USERNAME_TAKEN` | 409 | CA-02.2 |
-| `ISBN_TAKEN` | 409 | CA-03.2 |
-| `DOCUMENT_TAKEN` | 409 | CA-05.1 |
-| `BOOK_HAS_OPEN_LOANS` | 409 | CA-03.5 |
-| `BOOK_NOT_AVAILABLE` | 409 | CA-06.3 |
-| `MEMBER_HAS_OVERDUE` | 409 | CA-06.5 |
-| `ITEM_ALREADY_RETURNED` | 409 | CA-07.2 |
-| `MEMBER_LIMIT_EXCEEDED` | 422 | CA-06.4 |
-| `DUPLICATE_BOOK_IN_LOAN` | 422 | CA-06.2 |
-| `VALIDATION_ERROR` | 422 | Cualquier campo inválido |
-| `INVALID_DATE_RANGE` | 422 | CA-10.2 |
+| `INVALID_CREDENTIALS` | 401 | AC-01.2 |
+| `FORBIDDEN_ROLE` | 403 | AC-01.3 |
+| `NOT_FOUND` | 404 | Any resource |
+| `USERNAME_TAKEN` | 409 | AC-02.2 |
+| `ISBN_TAKEN` | 409 | AC-03.2 |
+| `DOCUMENT_TAKEN` | 409 | AC-05.1 |
+| `BOOK_HAS_OPEN_LOANS` | 409 | AC-03.5 |
+| `BOOK_NOT_AVAILABLE` | 409 | AC-06.3 |
+| `MEMBER_HAS_OVERDUE` | 409 | AC-06.5 |
+| `ITEM_ALREADY_RETURNED` | 409 | AC-07.2 |
+| `MEMBER_LIMIT_EXCEEDED` | 422 | AC-06.4 |
+| `DUPLICATE_BOOK_IN_LOAN` | 422 | AC-06.2 |
+| `VALIDATION_ERROR` | 422 | Any invalid field |
+| `INVALID_DATE_RANGE` | 422 | AC-10.2 |
 
 ## 3. Endpoints
 
-### 3.1 Autenticación y salud
+### 3.1 Authentication and health
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| POST | `/auth/login` | público | Devuelve token |
-| GET | `/health` | público | `{ "status": "ok" }` |
+| POST | `/auth/login` | public | Returns a token |
+| GET | `/health` | public | `{ "status": "ok" }` |
 
 `POST /auth/login`
 
 ```json
-// petición
+// request
 { "username": "ana", "password": "********" }
 // 200
 { "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 28800, "role": "librarian" }
 ```
 
-### 3.2 Usuarios
+### 3.2 Users
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| POST | `/users` | admin | Crea un bibliotecario |
+| POST | `/users` | admin | Creates a librarian |
 
 ```json
-// petición  (role solo admite "librarian")
+// request  (role only accepts "librarian")
 { "username": "Ana ", "password": "********", "role": "librarian" }
-// 201  (sin password ni password_hash)
+// 201  (no password, no password_hash)
 { "id": "…", "username": "ana", "role": "librarian" }
 ```
 
-### 3.3 Categorías
+### 3.3 Categories
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| GET | `/categories` | autenticado | Las cinco categorías, orden por nombre |
+| GET | `/categories` | authenticated | The five categories, ordered by name |
 
-### 3.4 Libros
+### 3.4 Books
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| GET | `/books` | autenticado | Búsqueda: `q`, `category_id`, `page`, `size` |
-| GET | `/books/{id}` | autenticado | Detalle |
-| POST | `/books` | admin | Crea |
-| PUT | `/books/{id}` | admin | Reemplaza título, autor, categoría y total |
-| DELETE | `/books/{id}` | admin | Baja lógica |
-| PUT | `/books/{id}/cover` | admin | Sube portada (`multipart/form-data`, campo `file`) |
-| DELETE | `/books/{id}/cover` | admin | Quita la portada |
+| GET | `/books` | authenticated | Search: `q`, `category_id`, `page`, `size` |
+| GET | `/books/{id}` | authenticated | Detail |
+| POST | `/books` | admin | Creates |
+| PUT | `/books/{id}` | admin | Replaces title, author, category and total |
+| DELETE | `/books/{id}` | admin | Soft delete |
+| PUT | `/books/{id}/cover` | admin | Uploads a cover (`multipart/form-data`, field `file`) |
+| DELETE | `/books/{id}/cover` | admin | Removes the cover |
 
-Libro (respuesta):
+Book (response):
 
 ```json
 {
@@ -117,31 +118,33 @@ Libro (respuesta):
 }
 ```
 
-`POST /books` (petición): `title`, `author`, `isbn`, `category_id`, `total_copies`. Los disponibles los calcula el servidor.
-`cover_key` es una clave opaca: para pintar la portada se usa `GET /books/{id}/cover`, que devuelve el binario o 404.
+`POST /books` (request): `title`, `author`, `isbn`, `category_id`, `total_copies`. Available copies
+are computed by the server.
+`cover_key` is an opaque key: to render the cover, use `GET /books/{id}/cover`, which returns the
+binary or 404.
 
-### 3.5 Socios
+### 3.5 Members
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| GET | `/members` | admin, librarian | Lista y busca: `q`, `page`, `size` |
-| GET | `/members/{id}` | admin, librarian | Detalle con `active_loans` (conteo sin devolver) |
-| POST | `/members` | admin, librarian | Crea: `full_name`, `document_number` |
+| GET | `/members` | admin, librarian | List and search: `q`, `page`, `size` |
+| GET | `/members/{id}` | admin, librarian | Detail with `active_loans` (count of unreturned items) |
+| POST | `/members` | admin, librarian | Creates: `full_name`, `document_number` |
 
-### 3.6 Préstamos
+### 3.6 Loans
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| POST | `/loans` | admin, librarian | Registra un préstamo |
-| GET | `/loans` | admin, librarian | Lista: `from`, `to`, `status`, `member_id`, `page`, `size` |
-| GET | `/loans/{id}` | admin, librarian | Detalle con líneas y estado |
-| POST | `/loans/{loan_id}/items/{item_id}/return` | admin, librarian | Devuelve una línea |
-| GET | `/loans/overdue` | admin, librarian | Líneas vencidas |
+| POST | `/loans` | admin, librarian | Registers a loan |
+| GET | `/loans` | admin, librarian | Lists: `from`, `to`, `status`, `member_id`, `page`, `size` |
+| GET | `/loans/{id}` | admin, librarian | Detail with lines and status |
+| POST | `/loans/{loan_id}/items/{item_id}/return` | admin, librarian | Returns one line |
+| GET | `/loans/overdue` | admin, librarian | Overdue lines |
 
 `POST /loans`
 
 ```json
-// petición  (1 a 3 elementos, sin libros repetidos)
+// request  (1 to 3 items, no repeated books)
 { "member_id": "…", "items": [ { "book_id": "…" }, { "book_id": "…" } ] }
 // 201
 {
@@ -153,18 +156,20 @@ Libro (respuesta):
 }
 ```
 
-`status` es calculado: `open` (hay líneas sin devolver y ninguna vencida), `overdue` (alguna sin devolver y vencida), `closed` (todas devueltas).
+`status` is computed: `open` (there are unreturned lines and none overdue), `overdue` (some
+unreturned and overdue), `closed` (every line returned).
 
-`POST /loans/{loan_id}/items/{item_id}/return` → 200 con la línea (`returned_at` lleno).
+`POST /loans/{loan_id}/items/{item_id}/return` → 200 with the line (`returned_at` filled in).
 
-`GET /loans/overdue` → `items`: `{ "loan_id", "item_id", "book_title", "member_name", "due_at", "days_late" }`. Aquí sí se muestra el nombre del
-socio, porque es un listado operativo; **el reporte del §3.7 no**.
+`GET /loans/overdue` → `items`: `{ "loan_id", "item_id", "book_title", "member_name", "due_at",
+"days_late" }`. Here the member's name **is** shown, because it is an operational listing; the
+§3.7 report does **not** show it.
 
-### 3.7 Reporte
+### 3.7 Report
 
-| Método | Ruta | Rol | Descripción |
+| Method | Route | Role | Description |
 |---|---|---|---|
-| GET | `/reports/most-borrowed` | admin | `from` y `to` obligatorios (fecha, ambos inclusive) |
+| GET | `/reports/most-borrowed` | admin | `from` and `to` required (date, both inclusive) |
 
 ```json
 {
@@ -175,14 +180,15 @@ socio, porque es un listado operativo; **el reporte del §3.7 no**.
 }
 ```
 
-Una fila por `book_id + book_title + category_name` congelados. Orden: `times_borrowed` descendente, luego título. Sin socios ni bibliotecarios.
+One row per frozen `book_id + book_title + category_name`. Order: `times_borrowed` descending, then
+title. No members, no librarians.
 
-## 4. Seguridad
+## 4. Security
 
-| Aspecto | Regla |
+| Aspect | Rule |
 |---|---|
-| Token | JWT firmado, 8 horas, con `sub` y `role`. Sin datos personales dentro |
-| Contraseñas | Solo se guarda el hash; el hash nunca sale en ninguna respuesta |
-| Autorización | Se evalúa en cada endpoint por rol; un 403 no revela si el recurso existe |
-| CORS | Solo el origen del frontend configurado por entorno |
-| Subida de portada | Solo `image/jpeg` y `image/png`, máx. 2 MB; el tipo se valida por contenido, no por extensión |
+| Token | Signed JWT, 8 hours, with `sub` and `role`. No personal data inside |
+| Passwords | Only the hash is stored; the hash never leaves in any response |
+| Authorization | Evaluated on every endpoint by role; a 403 does not reveal whether the resource exists |
+| CORS | Only the frontend origin configured through the environment |
+| Cover upload | Only `image/jpeg` and `image/png`, max 2 MB; the type is validated by content, not by extension |

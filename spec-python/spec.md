@@ -1,109 +1,127 @@
-# Especificación — Manager Library
+# Specification — Manager Library
 
-**Qué se construye y por qué.** Un sistema para que una biblioteca pequeña lleve su catálogo de libros,
-sus socios y sus préstamos, y vea qué libros se prestan más.
+**What is built and why.** A system for a small library to track its catalog of books, its members
+and its loans, and to see which books are borrowed the most.
 
-Rige bajo [`constitution.md`](constitution.md). El modelo de datos vive solo en [`data-model.md`](data-model.md)
-y el contrato HTTP solo en [`api-contract.md`](api-contract.md).
+Governed by [`constitution.md`](constitution.md). The data model lives only in
+[`data-model.md`](data-model.md) and the HTTP contract only in [`api-contract.md`](api-contract.md).
 
 ---
 
-## 1. Actores
+## 1. Actors
 
-| Actor | Qué hace | Cómo se autentica |
+| Actor | What they do | How they authenticate |
 |---|---|---|
-| **Administrador** (`admin`) | Mantiene el catálogo de libros y los socios; da de alta bibliotecarios; ve todos los reportes | Usuario y contraseña → token |
-| **Bibliotecario** (`librarian`) | Registra préstamos y devoluciones; consulta catálogo, socios y vencidos | Usuario y contraseña → token |
-| **Socio** | Persona que pide libros prestados. **No entra al sistema**: es un dato, no un usuario | — |
+| **Admin** (`admin`) | Maintains the book catalog and the members; onboards librarians; sees every report | Username and password → token |
+| **Librarian** (`librarian`) | Registers loans and returns; looks up the catalog, members and overdue items | Username and password → token |
+| **Member** | A person who borrows books. **Never logs in**: they are data, not a user | — |
 
-El rol `admin` lo provisiona el despliegue desde variables de entorno. **Nadie lo otorga en ejecución.**
+The `admin` role is provisioned by the deployment from environment variables. **Nobody grants it at
+runtime.**
 
-## 2. Alcance
+## 2. Scope
 
-**Dentro:** catálogo de libros con portada opcional, cinco categorías fijas, socios, préstamos con varias
-líneas, devolución por línea, libros vencidos, reporte de más prestados, inicio de sesión con roles.
+**In:** book catalog with an optional cover, five fixed categories, members, loans with several
+lines, per-line returns, overdue books, most-borrowed report, login with roles.
 
-**Fuera, y no se reabre:** multas y pagos, reservas, renovaciones, correo o SMS, importación masiva,
-préstamos entre sedes, atributos de libro más allá de los de §3 (sin editorial, sin año, sin idioma).
+**Out, and not reopened:** fines and payments, reservations, renewals, email or SMS, bulk import,
+inter-branch loans, book attributes beyond §3 (no publisher, no year, no language).
 
-## 3. Historias de usuario y criterios de aceptación
+## 3. User stories and acceptance criteria
 
-### HU-01 · Iniciar sesión
-Como usuario quiero autenticarme para operar según mi rol.
-- **CA-01.1** Con credenciales válidas se recibe un token con vigencia de 8 horas.
-- **CA-01.2** Con credenciales inválidas responde 401 con un mensaje que **no** dice si falló el usuario o la clave.
-- **CA-01.3** Todo endpoint salvo el inicio de sesión y `/health` exige token. Sin token: 401. Rol insuficiente: 403.
+### US-01 · Log in
+As a user I want to authenticate so I can operate according to my role.
+- **AC-01.1** With valid credentials a token is issued, valid for 8 hours.
+- **AC-01.2** With invalid credentials it responds 401 with a message that does **not** say whether
+  the username or the password failed.
+- **AC-01.3** Every endpoint except login and `/health` requires a token. No token: 401.
+  Insufficient role: 403.
 
-### HU-02 · Dar de alta bibliotecarios (admin)
-- **CA-02.1** El admin crea un usuario con nombre, clave y rol `librarian`.
-- **CA-02.2** El nombre de usuario se guarda en minúsculas y recortado; es único. Repetido: 409.
-- **CA-02.3** Pedir el rol `admin` por la API responde 422. La clave nunca se devuelve ni se registra en logs.
+### US-02 · Onboard librarians (admin)
+- **AC-02.1** The admin creates a user with a username, a password and the `librarian` role.
+- **AC-02.2** The username is stored lowercased and trimmed; it is unique. Duplicate: 409.
+- **AC-02.3** Requesting the `admin` role through the API responds 422. The password is never
+  returned nor logged.
 
-### HU-03 · Gestionar libros (admin)
-- **CA-03.1** Crear libro con título, autor, ISBN, categoría y total de ejemplares. Los disponibles arrancan iguales al total.
-- **CA-03.2** El ISBN tiene 13 dígitos y es único entre libros activos. Repetido: 409.
-- **CA-03.3** Total de ejemplares ≥ 1. Cambiar el total ajusta los disponibles en la misma diferencia y **nunca** deja disponibles < 0 (422).
-- **CA-03.4** Subir portada (JPG/PNG, máx. 2 MB) guarda una **clave opaca**; sin portada el campo es `null`, nunca cadena vacía.
-- **CA-03.5** Eliminar un libro es **baja lógica**: deja de aparecer en el catálogo pero sigue en los préstamos pasados. Un libro con préstamos abiertos no se da de baja (409).
+### US-03 · Manage books (admin)
+- **AC-03.1** Create a book with title, author, ISBN, category and total copies. Available copies
+  start equal to the total.
+- **AC-03.2** The ISBN has 13 digits and is unique among active books. Duplicate: 409.
+- **AC-03.3** Total copies ≥ 1. Changing the total adjusts the available copies by the same
+  difference and **never** leaves available copies < 0 (422).
+- **AC-03.4** Uploading a cover (JPG/PNG, max 2 MB) stores an **opaque key**; with no cover the field
+  is `null`, never an empty string.
+- **AC-03.5** Deleting a book is a **soft delete**: it stops appearing in the catalog but stays in
+  past loans. A book with open loans is not deleted (409).
 
-### HU-04 · Buscar libros
-- **CA-04.1** Búsqueda por texto parcial en título o autor, filtro por categoría, solo libros activos, orden por título, paginada (`page`, `size`, máx. 50).
-- **CA-04.2** La respuesta incluye el total de resultados.
-- **CA-04.3** Consultar un libro por id inexistente o dado de baja: 404.
+### US-04 · Search books
+- **AC-04.1** Partial-text search on title or author, filter by category, active books only,
+  ordered by title, paginated (`page`, `size`, max 50).
+- **AC-04.2** The response includes the total result count.
+- **AC-04.3** Looking up a book by a nonexistent or deleted id: 404.
 
-### HU-05 · Gestionar socios
-- **CA-05.1** El admin y el bibliotecario crean socios con nombre y documento. El documento es único: repetido 409.
-- **CA-05.2** Se lista y se busca por nombre o documento, paginado.
-- **CA-05.3** Los socios no se eliminan.
+### US-05 · Manage members
+- **AC-05.1** The admin and the librarian create members with a name and a document number. The
+  document number is unique: duplicate 409.
+- **AC-05.2** Members are listed and searched by name or document number, paginated.
+- **AC-05.3** Members are never deleted.
 
-### HU-06 · Registrar un préstamo
-- **CA-06.1** Un préstamo es de **un** socio, lo registra el usuario autenticado y trae de 1 a 3 líneas.
-- **CA-06.2** No se repite el mismo libro en un préstamo (422).
-- **CA-06.3** Cada línea descuenta **1** ejemplar disponible en la misma operación. Sin ejemplares: 409 y **no se registra nada**.
-- **CA-06.4** Un socio no puede tener más de **3 libros sin devolver** en total (422 con el conteo actual).
-- **CA-06.5** Un socio con algún libro **vencido** no puede pedir otro (409).
-- **CA-06.6** La fecha de vencimiento es `loaned_at + 14 días`. La línea congela título, ISBN y nombre de categoría **en ese instante**.
-- **CA-06.7** El préstamo registrado no se edita ni se borra.
+### US-06 · Register a loan
+- **AC-06.1** A loan belongs to **one** member, is registered by the authenticated user, and carries
+  1 to 3 lines.
+- **AC-06.2** The same book cannot repeat within a loan (422).
+- **AC-06.3** Each line withdraws **1** available copy in the same operation. With no copies left:
+  409 and **nothing is recorded**.
+- **AC-06.4** A member cannot have more than **3 unreturned books** in total (422 with the current
+  count).
+- **AC-06.5** A member with any **overdue** book cannot borrow another (409).
+- **AC-06.6** The due date is `loaned_at + 14 days`. The line freezes the title, ISBN and category
+  name **at that instant**.
+- **AC-06.7** A registered loan is neither edited nor deleted.
 
-### HU-07 · Registrar una devolución
-- **CA-07.1** Se devuelve **una línea** a la vez. Pone `returned_at` y suma 1 a los disponibles.
-- **CA-07.2** Devolver una línea ya devuelta: 409. **Nunca** suma dos veces.
-- **CA-07.3** Los disponibles jamás superan el total (la base lo garantiza).
-- **CA-07.4** Cuando todas las líneas están devueltas, el préstamo figura como **cerrado**.
+### US-07 · Register a return
+- **AC-07.1** **One line** is returned at a time. It sets `returned_at` and adds 1 to the available
+  copies.
+- **AC-07.2** Returning an already-returned line: 409. It **never** adds twice.
+- **AC-07.3** Available copies never exceed the total (the database guarantees it).
+- **AC-07.4** When every line is returned, the loan shows as **closed**.
 
-### HU-08 · Ver un préstamo y listar préstamos
-- **CA-08.1** Consultar un préstamo trae sus líneas y su estado calculado (`open`, `overdue`, `closed`).
-- **CA-08.2** Listar por rango de fechas, estado y socio, orden por fecha descendente, paginado.
-- **CA-08.3** El estado **se calcula**, no se almacena.
+### US-08 · View a loan and list loans
+- **AC-08.1** Fetching a loan returns its lines and its computed status (`open`, `overdue`,
+  `closed`).
+- **AC-08.2** Listing by date range, status and member, ordered by date descending, paginated.
+- **AC-08.3** The status **is computed**, not stored.
 
-### HU-09 · Libros vencidos
-- **CA-09.1** Lista las líneas sin devolver con `due_at` anterior a ahora: libro, socio, días de retraso.
-- **CA-09.2** Ordenadas por más días de retraso primero. Solo `admin` y `librarian`.
+### US-09 · Overdue books
+- **AC-09.1** Lists unreturned lines with `due_at` earlier than now: book, member, days late.
+- **AC-09.2** Ordered by most days late first. `admin` and `librarian` only.
 
-### HU-10 · Reporte de libros más prestados
-- **CA-10.1** Dado un rango de fechas, una fila por **libro y nombre de categoría congelado**, con la cantidad de veces prestado, ordenado de mayor a menor.
-- **CA-10.2** Fin anterior al inicio: 422. Rango sin préstamos: lista vacía, no error.
-- **CA-10.3** El reporte **no** se desglosa por bibliotecario ni por socio.
-- **CA-10.4** Un reporte de un periodo cerrado **no cambia** aunque luego se renombre el libro o su categoría.
-- **CA-10.5** Solo `admin`.
+### US-10 · Most-borrowed books report
+- **AC-10.1** Given a date range, one row per **book and frozen category name**, with the number of
+  times borrowed, ordered highest to lowest.
+- **AC-10.2** End before start: 422. A range with no loans: an empty list, not an error.
+- **AC-10.3** The report is **not** broken down by librarian or by member.
+- **AC-10.4** A report for a closed period **does not change** even if the book or its category is
+  later renamed.
+- **AC-10.5** `admin` only.
 
-## 4. Reglas de negocio
+## 4. Business rules
 
-| # | Regla |
+| # | Rule |
 |---|---|
-| RN-1 | Disponibles entre 0 y total, siempre. |
-| RN-2 | Plazo de préstamo: 14 días. Máximo 3 libros sin devolver por socio. |
-| RN-3 | Un socio con vencidos no pide más hasta devolverlos. |
-| RN-4 | Lo congelado en la línea (título, ISBN, categoría) no sigue al catálogo. |
-| RN-5 | Préstamos y devoluciones no se borran. Los libros solo tienen baja lógica. |
-| RN-6 | Las fechas son instantes UTC. Mensajes al usuario en español; código y columnas en inglés. |
+| BR-1 | Available copies between 0 and total, always. |
+| BR-2 | Loan period: 14 days. Maximum 3 unreturned books per member. |
+| BR-3 | A member with overdue items cannot borrow more until they return them. |
+| BR-4 | What is frozen in the line (title, ISBN, category) does not follow the catalog. |
+| BR-5 | Loans and returns are never deleted. Books only get a soft delete. |
+| BR-6 | Dates are UTC instants. User-facing messages in Spanish; code and columns in English. |
 
-## 5. Requisitos no funcionales
+## 5. Non-functional requirements
 
-| # | Requisito | Cómo se mide |
+| # | Requirement | How it is measured |
 |---|---|---|
-| RNF-1 | La búsqueda de libros responde en menos de 300 ms con 5 000 libros | Prueba de carga con el sembrador de `tool` |
-| RNF-2 | Dos bibliotecarios prestando el **último ejemplar** a la vez: uno gana, el otro recibe 409 | Prueba concurrente |
-| RNF-3 | La contraseña nunca viaja ni se guarda en claro; nunca aparece en logs | Revisión de logs y de respuestas |
-| RNF-4 | Todo error HTTP usa el mismo cuerpo (ver contrato) | Prueba de contrato |
-| RNF-5 | El sistema levanta con un solo comando y la base arranca vacía | `README` de `infra` |
+| NFR-1 | Book search responds in under 300 ms with 5,000 books | Load test with the `tool` seeder |
+| NFR-2 | Two librarians lending the **last copy** at the same time: one wins, the other gets 409 | Concurrent test |
+| NFR-3 | The password never travels or is stored in clear text; it never appears in logs | Review of logs and responses |
+| NFR-4 | Every HTTP error uses the same body (see contract) | Contract test |
+| NFR-5 | The system boots with a single command and the database starts empty | `infra` `README` |
